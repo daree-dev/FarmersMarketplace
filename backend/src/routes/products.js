@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const db = require('../db/schema');
 const auth = require('../middleware/auth');
+const validate = require('../middleware/validate');
 
 // GET /api/products - public browse
 router.get('/', (req, res) => {
@@ -27,13 +28,11 @@ router.get('/:id', (req, res) => {
 });
 
 // POST /api/products - farmer only
-router.post('/', auth, (req, res) => {
+router.post('/', auth, validate.product, (req, res) => {
   if (req.user.role !== 'farmer')
     return res.status(403).json({ error: 'Only farmers can list products' });
 
   const { name, description, price, quantity, unit } = req.body;
-  if (!name || !price || !quantity)
-    return res.status(400).json({ error: 'name, price, quantity required' });
 
   const result = db.prepare(
     'INSERT INTO products (farmer_id, name, description, price, quantity, unit) VALUES (?, ?, ?, ?, ?, ?)'
