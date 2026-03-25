@@ -40,4 +40,5 @@ export const api = {
   getWallet: () => request('/wallet'),
   getTransactions: () => request('/wallet/transactions'),
   fundWallet: () => request('/wallet/fund', { method: 'POST' }),
+  sendXLM: (body) => request('/wallet/send', { method: 'POST', body }),
 };
