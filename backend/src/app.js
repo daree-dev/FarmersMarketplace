@@ -1,7 +1,18 @@
 require('dotenv').config();
+
+// Fail fast — refuse to start if critical secrets are missing
+const REQUIRED_ENV = ['JWT_SECRET'];
+const missing = REQUIRED_ENV.filter(k => !process.env[k]);
+if (missing.length) {
+  console.error(`[FATAL] Missing required environment variables: ${missing.join(', ')}`);
+  console.error('Copy backend/.env.example to backend/.env and fill in the values.');
+  process.exit(1);
+}
+
 const express = require('express');
 const cors = require('cors');
 const { csrfProtect, csrfTokenHandler } = require('./middleware/csrf');
+const { errorHandler } = require('./middleware/error');
 
 const app = express();
 
@@ -19,5 +30,6 @@ app.get('/api/csrf-token', csrfTokenHandler);
 app.use(csrfProtect);
 
 app.use(require('./routes'));
+app.use(errorHandler);
 
 module.exports = app;
