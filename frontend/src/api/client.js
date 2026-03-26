@@ -181,7 +181,7 @@ export var api = {
   deleteProduct: function(id) { return request('/products/' + id, { method: 'DELETE' }); },
 
   placeOrder: function(body) { return request('/orders', { method: 'POST', body: body }); },
-  getOrders: function() { return request('/orders'); },
+  getOrders: function(status) { return request('/orders' + (status ? '?status=' + status : '')); },
   getSales: function() { return request('/orders/sales'); },
 
   getWallet: function() { return request('/wallet'); },

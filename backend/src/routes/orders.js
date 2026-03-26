@@ -84,15 +84,28 @@ router.post('/', auth, validate.order, async (req, res) => {
 });
 
 // GET /api/orders - buyer's order history
+// Query params: status (pending | paid | failed)
 router.get('/', auth, (req, res) => {
-  const orders = db.prepare(`
+  const { status } = req.query;
+  const VALID_STATUSES = ['pending', 'paid', 'failed'];
+
+  let sql = `
     SELECT o.*, p.name as product_name, p.unit, u.name as farmer_name
     FROM orders o
     JOIN products p ON o.product_id = p.id
     JOIN users u ON p.farmer_id = u.id
     WHERE o.buyer_id = ?
-    ORDER BY o.created_at DESC
-  `).all(req.user.id);
+  `;
+  const params = [req.user.id];
+
+  if (status && VALID_STATUSES.includes(status)) {
+    sql += ` AND o.status = ?`;
+    params.push(status);
+  }
+
+  sql += ` ORDER BY o.created_at DESC`;
+
+  const orders = db.prepare(sql).all(...params);
   res.json({ success: true, data: orders });
 });
 
