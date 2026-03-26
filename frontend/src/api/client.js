@@ -80,17 +80,20 @@ async function request(path, options = {}, retry = true) {
   return data;
 }
 
+/** Build a query string from a params object, omitting empty/null values. */
+function toQs(params) {
+  const entries = Object.entries(params).filter(([, v]) => v !== '' && v != null);
+  return entries.length ? '?' + new URLSearchParams(entries).toString() : '';
+}
+
 export const api = {
   register: (body) => request('/auth/register', { method: 'POST', body }),
   login: (body) => request('/auth/login', { method: 'POST', body }),
   logout: () => request('/auth/logout', { method: 'POST' }),
   refresh: () => refreshAccessToken(),
 
-  getProducts: (filters = {}) => {
-    const entries = Object.entries(filters).filter(([, v]) => v !== '' && v != null);
-    const qs = new URLSearchParams(entries).toString();
-    return request(`/products${qs ? `?${qs}` : ''}`);
-  },
+  // filters may include: category, minPrice, maxPrice, seller, available, page, limit
+  getProducts: (filters = {}) => request(`/products${toQs(filters)}`),
   getCategories: () => request('/products/categories'),
   getProduct: (id) => request(`/products/${id}`),
   createProduct: (body) => request('/products', { method: 'POST', body }),
@@ -105,23 +108,12 @@ export const api = {
   },
 
   placeOrder: (body) => request('/orders', { method: 'POST', body }),
-  getOrders: () => request('/orders'),
-  getSales: () => request('/orders/sales'),
+  // params may include: status, page, limit
+  getOrders: (params = {}) => request(`/orders${toQs(params)}`),
+  // params may include: page, limit
+  getSales: (params = {}) => request(`/orders/sales${toQs(params)}`),
 
   getWallet: () => request('/wallet'),
   getTransactions: () => request('/wallet/transactions'),
   fundWallet: () => request('/wallet/fund', { method: 'POST' }),
-  getCategories: function() { return request('/products/categories'); },
-  getProduct: function(id) { return request('/products/' + id); },
-  createProduct: function(body) { return request('/products', { method: 'POST', body: body }); },
-  getMyProducts: function() { return request('/products/mine/list'); },
-  deleteProduct: function(id) { return request('/products/' + id, { method: 'DELETE' }); },
-
-  placeOrder: function(body) { return request('/orders', { method: 'POST', body: body }); },
-  getOrders: function(status) { return request('/orders' + (status ? '?status=' + status : '')); },
-  getSales: function() { return request('/orders/sales'); },
-
-  getWallet: function() { return request('/wallet'); },
-  getTransactions: function() { return request('/wallet/transactions'); },
-  fundWallet: function() { return request('/wallet/fund', { method: 'POST' }); },
 };
