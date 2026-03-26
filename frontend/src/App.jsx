@@ -2,7 +2,7 @@ import React, { useEffect, useContext } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LoadingProvider, LoadingContext } from './context/LoadingContext';
-import { setLoadingCallback } from './api/client';
+import { setLoadingCallback, setLogoutCallback } from './api/client';
 import Navbar from './components/Navbar';
 import LoadingSpinner from './components/LoadingSpinner';
 import { LoginPage, RegisterPage } from './pages/Auth';
@@ -29,10 +29,12 @@ function Home() {
 
 function AppContent() {
   const { setLoading } = useContext(LoadingContext);
+  const { logout } = useAuth();
 
   useEffect(() => {
     setLoadingCallback(setLoading);
-  }, [setLoading]);
+    setLogoutCallback(logout);
+  }, [setLoading, logout]);
 
   return (
     <>
