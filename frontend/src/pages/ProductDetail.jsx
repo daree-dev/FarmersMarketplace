@@ -78,7 +78,15 @@ export default function ProductDetail() {
           : <div style={{ fontSize: 48, marginBottom: 12 }}>🥬</div>
         }
         <div style={s.name}>{product.name}</div>
-        <div style={s.farmer}>Sold by {product.farmer_name}</div>
+        <div style={s.farmer}>
+          Sold by{' '}
+          <span
+            style={{ cursor: 'pointer', textDecoration: 'underline', color: '#2d6a4f' }}
+            onClick={() => navigate(`/farmer/${product.farmer_id}`)}
+          >
+            {product.farmer_name}
+          </span>
+        </div>
         <div style={s.desc}>{product.description || 'Fresh from the farm.'}</div>
         <div style={s.price}>{product.price} XLM <span style={{ fontSize: 14, fontWeight: 400 }}>/ {product.unit}</span></div>
         <div style={{ fontSize: 13, color: '#888', marginBottom: 20 }}>{product.quantity} {product.unit} in stock</div>
