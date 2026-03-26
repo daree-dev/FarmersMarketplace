@@ -5,6 +5,7 @@ const validate = require('../middleware/validate');
 const { err } = require('../middleware/error');
 
 // GET /api/products - public browse with optional filters
+// Query params: category, minPrice, maxPrice, seller (farmer name), available (default true), page, limit
 // Query params: category, minPrice, maxPrice, seller, available (default true)
 router.get('/', (req, res) => {
   const { category, minPrice, maxPrice, seller, available = 'true' } = req.query;
@@ -22,19 +23,61 @@ router.get('/', (req, res) => {
 
   res.json(db.prepare(sql).all(...params));
 router.get('/', (req, res) => {
-  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const page  = Math.max(1, parseInt(req.query.page)  || 1);
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
   const offset = (page - 1) * limit;
 
-  const total = db.prepare('SELECT COUNT(*) as count FROM products WHERE quantity > 0').get().count;
-  const products = db.prepare(`
-    SELECT p.*, u.name as farmer_name
-    FROM products p
-    JOIN users u ON p.farmer_id = u.id
-    WHERE p.quantity > 0
-    ORDER BY p.created_at DESC
-    LIMIT ? OFFSET ?
-  `).all(limit, offset);
+  const { category, minPrice, maxPrice, seller, available = 'true' } = req.query;
+
+  // Build WHERE clauses and params arrays using only parameter binding — no string interpolation of user input
+  const conditions = [];
+  const countParams = [];
+  const dataParams  = [];
+
+  if (available === 'true') {
+    conditions.push('p.quantity > 0');
+  }
+  if (category) {
+    conditions.push('p.category = ?');
+    countParams.push(category);
+    dataParams.push(category);
+  }
+  if (minPrice !== undefined) {
+    const min = parseFloat(minPrice);
+    if (!isNaN(min)) {
+      conditions.push('p.price >= ?');
+      countParams.push(min);
+      dataParams.push(min);
+    }
+  }
+  if (maxPrice !== undefined) {
+    const max = parseFloat(maxPrice);
+    if (!isNaN(max)) {
+      conditions.push('p.price <= ?');
+      countParams.push(max);
+      dataParams.push(max);
+    }
+  }
+  if (seller) {
+    conditions.push('u.name LIKE ?');
+    countParams.push(`%${seller}%`);
+    dataParams.push(`%${seller}%`);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const total = db.prepare(
+    `SELECT COUNT(*) as count FROM products p JOIN users u ON p.farmer_id = u.id ${where}`
+  ).get(...countParams).count;
+
+  const products = db.prepare(
+    `SELECT p.*, u.name as farmer_name
+     FROM products p
+     JOIN users u ON p.farmer_id = u.id
+     ${where}
+     ORDER BY p.created_at DESC
+     LIMIT ? OFFSET ?`
+  ).all(...dataParams, limit, offset);
 
   res.json({
     success: true,
