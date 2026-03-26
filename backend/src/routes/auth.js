@@ -11,7 +11,7 @@ router.post('/register', validate.register, async (req, res) => {
   const { name, email, password, role } = req.body;
 
   try {
-    const hashed = await bcrypt.hash(password, 10);
+    const hashed = await bcrypt.hash(password, 12);
     const wallet = createWallet();
 
     const stmt = db.prepare(
