@@ -35,6 +35,17 @@ jobs:
         env:
           NODE_ENV: test
           JWT_SECRET: ci-test-secret
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: backend
+
+      - name: Run backend tests
+        run: npm test
+        working-directory: backend
+        env:
+          JWT_SECRET: test-secret-for-ci
+          STELLAR_NETWORK: testnet
+          NODE_ENV: test
 
   frontend-build:
     name: Frontend Build
@@ -60,3 +71,11 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Install frontend dependencies
+        run: npm install
+        working-directory: frontend
+
+      - name: Build frontend
+        run: npm run build
+        working-directory: frontend
