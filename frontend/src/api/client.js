@@ -104,24 +104,14 @@ export const api = {
     return request('/products/upload-image', { method: 'POST', body: form });
   },
 
+  searchProducts: (q) => request(`/products/search?q=${encodeURIComponent(q)}`),
+
   placeOrder: (body) => request('/orders', { method: 'POST', body }),
-  getOrders: () => request('/orders'),
+  getOrders: (status) => request(`/orders${status ? `?status=${status}` : ''}`),
   getSales: () => request('/orders/sales'),
+  updateOrderStatus: (id, status) => request(`/orders/${id}/status`, { method: 'PATCH', body: { status } }),
 
   getWallet: () => request('/wallet'),
   getTransactions: () => request('/wallet/transactions'),
   fundWallet: () => request('/wallet/fund', { method: 'POST' }),
-  getCategories: function() { return request('/products/categories'); },
-  getProduct: function(id) { return request('/products/' + id); },
-  createProduct: function(body) { return request('/products', { method: 'POST', body: body }); },
-  getMyProducts: function() { return request('/products/mine/list'); },
-  deleteProduct: function(id) { return request('/products/' + id, { method: 'DELETE' }); },
-
-  placeOrder: function(body) { return request('/orders', { method: 'POST', body: body }); },
-  getOrders: function(status) { return request('/orders' + (status ? '?status=' + status : '')); },
-  getSales: function() { return request('/orders/sales'); },
-
-  getWallet: function() { return request('/wallet'); },
-  getTransactions: function() { return request('/wallet/transactions'); },
-  fundWallet: function() { return request('/wallet/fund', { method: 'POST' }); },
 };
