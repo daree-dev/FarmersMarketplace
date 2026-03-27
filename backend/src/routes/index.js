@@ -74,6 +74,7 @@ router.use('/api/v1/products', require('./products'));
 router.use('/api/v1/orders',   require('./orders'));
 router.use('/api/v1/wallet',   require('./wallet'));
 router.use('/api/v1/farmers',  require('./farmers'));
+router.use('/api/v1/favorites', require('./favorites'));
 
 // Non-versioned routes (used by frontend)
 router.use('/api/auth',      require('./auth'));
@@ -82,11 +83,10 @@ router.use('/api/orders',    require('./orders'));
 router.use('/api/wallet',    require('./wallet'));
 router.use('/api/analytics', require('./analytics'));
 router.use('/api/admin',     require('./admin'));
-
-router.use('/api/v1',          require('./reviews'));
-
-router.use('/api/v1/rates',  require('./rates'));
+router.use('/api/farmers',   require('./farmers'));
+router.use('/api/favorites', require('./favorites'));
 router.use('/api/rates',     require('./rates'));
+router.use('/api',           require('./reviews'));
 
 // Legacy routes
 router.use('/api/auth',     require('./auth'));
