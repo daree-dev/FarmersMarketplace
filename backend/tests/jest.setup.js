@@ -7,9 +7,9 @@
  */
 
 // --- DB mock ---
-jest.mock('../src/db/schema', () => ({
-  prepare:     jest.fn(),
-  exec:        jest.fn(),
+jest.mock("../src/db/schema", () => ({
+  prepare: jest.fn(),
+  exec: jest.fn(),
   transaction: jest.fn(),
 }));
 
@@ -26,6 +26,9 @@ jest.mock('../src/utils/stellar', () => ({
 
 // --- Mailer mock ---
 jest.mock('../src/utils/mailer', () => ({
+  sendOrderEmails:      jest.fn().mockResolvedValue({}),
+  sendLowStockAlert:    jest.fn().mockResolvedValue({}),
+  sendStatusUpdateEmail: jest.fn().mockResolvedValue({}),
   sendOrderEmails:       jest.fn().mockResolvedValue({}),
   sendLowStockAlert:     jest.fn().mockResolvedValue({}),
   sendStatusUpdateEmail: jest.fn().mockResolvedValue({}),
