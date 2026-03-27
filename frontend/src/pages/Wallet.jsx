@@ -3,6 +3,7 @@ import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import Spinner from '../components/Spinner';
 import { getStellarErrorMessage } from '../utils/stellarErrors';
+import { getErrorMessage } from '../utils/errorMessages';
 
 const DISCLAIMER_KEY = 'testnet_disclaimer_dismissed';
 
@@ -74,6 +75,7 @@ export default function Wallet() {
       setLoadError(getStellarErrorMessage(err));
     } finally {
       setLoading(false);
+      setLoadError(getErrorMessage(err));
     }
   }
 
@@ -87,7 +89,7 @@ export default function Wallet() {
       setFundMsg({ type: 'ok', text: res.message });
       load();
     } catch (err) {
-      setFundMsg({ type: 'err', text: getStellarErrorMessage(err) });
+      setFundMsg({ type: 'err', text: getErrorMessage(err) });
     } finally {
       setFunding(false);
     }
@@ -115,7 +117,7 @@ export default function Wallet() {
       setSendForm({ destination: '', amount: '', currency: 'XLM', memo: '' });
       load();
     } catch (err) {
-      setSendMsg({ type: 'err', text: err.message });
+      setSendMsg({ type: 'err', text: getErrorMessage(err) });
     } finally {
       setSending(false);
     }

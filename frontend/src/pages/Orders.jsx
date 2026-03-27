@@ -1,6 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { api } from '../api/client';
 import Spinner from '../components/Spinner';
+import React, { useEffect, useState, useCallback } from 'react';
+import { api } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 const ALL_STATUSES = ['pending', 'paid', 'processing', 'shipped', 'delivered', 'failed'];
 const FILTER_TABS = ['all', ...ALL_STATUSES];
@@ -36,6 +39,7 @@ const s = {
   row:       { display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, padding: '16px 20px', borderBottom: '1px solid #f0f0f0', alignItems: 'start' },
   name:      { fontWeight: 600, fontSize: 15, marginBottom: 4, color: '#222' },
   meta:      { fontSize: 13, color: '#666', marginBottom: 2 },
+  address:   { fontSize: 12, color: '#888', marginTop: 4, fontStyle: 'italic' },
   hash:      { fontSize: 11, color: '#aaa', fontFamily: 'monospace', marginTop: 6, wordBreak: 'break-all' },
   badge:     { fontSize: 12, padding: '4px 12px', borderRadius: 20, fontWeight: 600, whiteSpace: 'nowrap' },
   empty:     { padding: '48px 20px', textAlign: 'center', color: '#aaa', fontSize: 15 },
@@ -78,6 +82,9 @@ export default function Orders() {
   const [loading, setLoading]      = useState(true);
   const [error, setError]          = useState(null);
   const [hovered, setHovered]      = useState(null);
+  const { user } = useAuth();
+  const [claimingId, setClaimingId] = useState(null);
+  const [claimError, setClaimError] = useState({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -94,6 +101,19 @@ export default function Orders() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  async function handleClaim(orderId) {
+    setClaimingId(orderId);
+    setClaimError(prev => ({ ...prev, [orderId]: '' }));
+    try {
+      await api.claimEscrow(orderId);
+      load();
+    } catch (e) {
+      setClaimError(prev => ({ ...prev, [orderId]: e.message }));
+    } finally {
+      setClaimingId(null);
+    }
+  }
 
   const stats = {
     total:   allOrders.length,
@@ -150,6 +170,71 @@ export default function Orders() {
             {visible.length === 0 ? (
               <div style={s.empty}>
                 {activeTab === 'all' ? 'No orders yet. Head to the marketplace to make a purchase.' : `No ${activeTab} orders.`}
+        ) : (
+          visible.map(o => {
+            const st = STATUS_STYLE[o.status] || { bg: '#eee', color: '#333' };
+            return (
+              <div key={o.id} style={{ ...s.row, ...(hovered === o.id ? { background: '#fafafa' } : {}) }}
+                onMouseEnter={() => setHovered(o.id)} onMouseLeave={() => setHovered(null)}>
+                <div>
+                  <div style={s.name}>{o.product_name}</div>
+                  <div style={s.meta}>{o.quantity} {o.unit} &nbsp;·&nbsp; from {o.farmer_name}</div>
+                  {o.address_label && (
+                    <div style={s.address}>
+                      📍 {o.address_label}: {o.address_street}, {o.address_city}, {o.address_country}
+                      {o.address_postal_code ? ` ${o.address_postal_code}` : ''}
+                    </div>
+                  )}
+                  <div style={s.meta}>
+                    {new Date(o.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                    {' '}<span style={{ color: '#bbb' }}>{new Date(o.created_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                  {o.stellar_tx_hash && (
+                    <div style={s.hash}>
+                      TX:{' '}
+                      <a href={`https://stellar.expert/explorer/testnet/tx/${o.stellar_tx_hash}`} target="_blank" rel="noreferrer" style={{ color: '#2d6a4f' }}>
+                        {o.stellar_tx_hash}
+                      </a>
+                    </div>
+                  )}
+                  <StatusTimeline status={o.status} />
+                  {o.escrow_status && o.escrow_status !== 'none' && (
+                    <div style={{ marginTop: 8 }}>
+                      <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 600,
+                        background: o.escrow_status === 'funded' ? '#fff3cd' : o.escrow_status === 'claimed' ? '#d8f3dc' : '#eee',
+                        color: o.escrow_status === 'funded' ? '#856404' : o.escrow_status === 'claimed' ? '#2d6a4f' : '#555' }}>
+                        🔒 Escrow: {o.escrow_status}
+                      </span>
+                      {o.escrow_balance_id && (
+                        <div style={{ ...s.hash, marginTop: 4 }}>
+                          Balance:{' '}
+                          <a href={`https://stellar.expert/explorer/testnet/claimable-balance/${o.escrow_balance_id}`} target="_blank" rel="noreferrer" style={{ color: '#2d6a4f' }}>
+                            {o.escrow_balance_id.slice(0, 20)}...
+                          </a>
+                        </div>
+                      )}
+                      {user?.role === 'farmer' && o.escrow_status === 'funded' && (
+                        <div style={{ marginTop: 6 }}>
+                          <button
+                            style={{ fontSize: 12, padding: '5px 14px', borderRadius: 8, border: 'none', cursor: o.status === 'delivered' ? 'pointer' : 'not-allowed',
+                              background: o.status === 'delivered' ? '#2d6a4f' : '#ccc', color: '#fff', fontWeight: 600 }}
+                            disabled={o.status !== 'delivered' || claimingId === o.id}
+                            onClick={() => handleClaim(o.id)}>
+                            {claimingId === o.id ? 'Claiming...' : '💰 Claim Payment'}
+                          </button>
+                          {o.status !== 'delivered' && <span style={{ fontSize: 11, color: '#888', marginLeft: 8 }}>Mark as delivered first</span>}
+                          {claimError[o.id] && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>{claimError[o.id]}</div>}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div style={s.right}>
+                  <span style={{ ...s.badge, background: st.bg, color: st.color }}>
+                    {STATUS_ICON[o.status]} {o.status}
+                  </span>
+                  <span style={s.price}>{parseFloat(o.total_price).toFixed(2)} XLM</span>
+                </div>
               </div>
             ) : (
               visible.map(o => {
