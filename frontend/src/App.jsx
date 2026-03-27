@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { FavoritesProvider } from './context/FavoritesContext';
 import { LoadingProvider, LoadingContext } from './context/LoadingContext';
 import { setLoadingCallback, setLogoutCallback } from './api/client';
+import ErrorBoundary from './components/ErrorBoundary';
 import Navbar from './components/Navbar';
 import LoadingSpinner from './components/LoadingSpinner';
 import { LoginPage, RegisterPage } from './pages/Auth';
@@ -67,6 +68,13 @@ function AppContent() {
 
 export default function App() {
   return (
+    <ErrorBoundary>
+      <AuthProvider>
+        <LoadingProvider>
+          <AppContent />
+        </LoadingProvider>
+      </AuthProvider>
+    </ErrorBoundary>
     <AuthProvider>
       <FavoritesProvider>
         <LoadingProvider>
