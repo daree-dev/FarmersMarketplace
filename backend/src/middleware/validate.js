@@ -140,23 +140,60 @@ const schemas = {
         ])
         .optional(),
     }),
-  ),
+  })),
 
-  review: validate(
-    z.object({
-      order_id: z.coerce
-        .number()
-        .int()
-        .positive("order_id must be a positive integer"),
-      rating: z.coerce
-        .number()
-        .int()
-        .min(1, "rating must be an integer between 1 and 5")
-        .max(5, "rating must be an integer between 1 and 5"),
-      comment: z
-        .string()
-        .max(1000, "comment must be 1000 characters or fewer")
-        .optional(),
+  farmerProfile: validate(z.object({
+    bio: z.string().max(500, 'bio must be 500 characters or fewer').optional(),
+    location: z.string().max(100, 'location must be 100 characters or fewer').optional(),
+    avatar_url: z.string().optional().nullable(),
+  })),
+
+  review: validate(z.object({
+    order_id: z.coerce.number().int().positive('order_id must be a positive integer'),
+    rating: z.coerce.number().int().min(1).max(5, 'rating must be an integer between 1 and 5'),
+    comment: z.string().max(1000, 'comment must be 1000 characters or fewer').optional(),
+  })),
+  register: [
+    body('name').trim().notEmpty().withMessage('name is required'),
+    body('email').isEmail().withMessage('valid email required'),
+    body('password')
+      .isLength({ min: 8 }).withMessage('password must be at least 8 characters')
+      .matches(/[A-Z]/).withMessage('password must contain at least one uppercase letter')
+      .matches(/[0-9]/).withMessage('password must contain at least one number')
+      .custom((value) => {
+        if (WEAK_PASSWORDS.has(value)) {
+          throw new Error('password is too common, choose a stronger one');
+        }
+        return true;
+      }),
+    body('role').isIn(['farmer', 'buyer']).withMessage('role must be farmer or buyer'),
+    handle,
+  ],
+  login: [
+    body('email').isEmail().withMessage('valid email required'),
+    body('password').notEmpty().withMessage('password is required'),
+    handle,
+  ],
+  product: [
+    body('name').trim().notEmpty().withMessage('name is required'),
+    body('price').isFloat({ gt: 0 }).withMessage('price must be a positive number'),
+    body('quantity').isInt({ gt: 0 }).withMessage('quantity must be a positive integer'),
+    body('unit').optional().trim().notEmpty().withMessage('unit cannot be blank'),
+    handle,
+  ],
+  order: [
+    body('product_id').isInt({ gt: 0 }).withMessage('product_id must be a positive integer'),
+    body('quantity').isInt({ gt: 0 }).withMessage('quantity must be a positive integer'),
+    handle,
+  ],
+  farmerProfile: [
+    body('bio').optional().isString().isLength({ max: 500 }).withMessage('bio must be 500 characters or fewer').trim(),
+    body('location').optional().isString().isLength({ max: 100 }).withMessage('location must be 100 characters or fewer').trim(),
+    body('avatar_url').optional({ nullable: true }).custom(v => {
+      if (v === null || v === '') return true;
+      if (!/^\/uploads\/[a-f0-9]+\.(jpg|jpeg|png|webp)$/i.test(v))
+        throw new Error('avatar_url must be a valid upload path');
+      return true;
     }),
     handle,
   ],

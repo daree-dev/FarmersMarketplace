@@ -22,9 +22,9 @@ router.get("/transactions", auth, async (req, res) => {
 });
 
 // POST /api/wallet/fund - testnet only
-router.post("/fund", auth, async (req, res) => {
-  if (!stellar.isTestnet)
-    return err(res, 400, "Only available on testnet", "testnet_only");
+router.post('/fund', auth, async (req, res) => {
+  if (!isTestnet)
+    return err(res, 400, 'Only available on testnet', 'testnet_only');
 
   const user = db
     .prepare("SELECT stellar_public_key FROM users WHERE id = ?")
@@ -58,7 +58,7 @@ router.post("/send", auth, validate.sendXLM, async (req, res) => {
       .status(400)
       .json({ error: "Cannot send XLM to your own wallet" });
 
-  const balance = await stellar.getBalance(user.stellar_public_key);
+  const balance = await getBalance(user.stellar_public_key);
   const required = amount + 0.00001;
   if (balance < required)
     return res.status(402).json({
@@ -76,11 +76,8 @@ router.post("/send", auth, validate.sendXLM, async (req, res) => {
     });
     res.json({ txHash, amount, destination, memo: memo || null });
   } catch (e) {
-    const stellarMsg =
-      e?.response?.data?.extras?.result_codes?.operations?.[0] || e.message;
-    res
-      .status(502)
-      .json({ error: `Stellar transaction failed: ${stellarMsg}` });
+    const stellarMsg = e?.response?.data?.extras?.result_codes?.operations?.[0] || e.message;
+    res.status(502).json({ error: `Stellar transaction failed: ${stellarMsg}` });
   }
 });
 

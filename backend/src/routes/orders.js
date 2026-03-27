@@ -3,6 +3,7 @@ const db = require('../db/schema');
 const auth = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const { sendPayment, getBalance } = require('../utils/stellar');
+const { sendOrderEmails, sendLowStockAlert, sendStatusUpdateEmail } = require('../utils/mailer');
 const { sendPayment, getBalance, createClaimableBalance, claimBalance } = require('../utils/stellar');
 const { sendOrderEmails, sendStatusUpdateEmail, sendLowStockAlert } = require('../utils/mailer');
 const { err } = require('../middleware/error');
@@ -57,11 +58,12 @@ router.post("/", auth, validate.order, async (req, res) => {
     });
 
   const reserveStock = db.transaction((buyerId, productId, qty, total) => {
-    const deducted = db
-      .prepare(
-        "UPDATE products SET quantity = quantity - ? WHERE id = ? AND quantity >= ?",
-      )
-      .run(qty, productId, qty);
+    // Atomic stock check + decrement: single UPDATE with WHERE quantity >= ? prevents race conditions.
+    // If multiple concurrent requests try to buy the last units, only one succeeds (changes > 0).
+    // Others fail because quantity no longer meets the WHERE condition (changes === 0).
+    const deducted = db.prepare(
+      'UPDATE products SET quantity = quantity - ? WHERE id = ? AND quantity >= ?'
+    ).run(qty, productId, qty);
 
     if (deducted.changes === 0) throw new Error("Insufficient stock");
 
@@ -128,24 +130,12 @@ router.post("/", auth, validate.order, async (req, res) => {
     }).catch((e) => console.error("Email notification failed:", e.message));
 
     // Low-stock check — send alert once per threshold crossing
-    const updated = db
-      .prepare(
-        "SELECT quantity, low_stock_threshold, low_stock_alerted FROM products WHERE id = ?",
-      )
-      .get(product_id);
-    if (
-      updated.quantity <= updated.low_stock_threshold &&
-      !updated.low_stock_alerted
-    ) {
-      db.prepare("UPDATE products SET low_stock_alerted = 1 WHERE id = ?").run(
-        product_id,
-      );
-      sendLowStockAlert({
-        product: { ...product, quantity: updated.quantity },
-        farmer,
-      }).catch((e) => console.error("Low-stock alert failed:", e.message));
+    const updated = db.prepare('SELECT quantity, low_stock_threshold, low_stock_alerted FROM products WHERE id = ?').get(product_id);
+    if (updated && updated.quantity <= updated.low_stock_threshold && !updated.low_stock_alerted) {
+      db.prepare('UPDATE products SET low_stock_alerted = 1 WHERE id = ?').run(product_id);
+      sendLowStockAlert({ product: { ...product, quantity: updated.quantity }, farmer })
+        .catch(e => console.error('Low-stock alert failed:', e.message));
     }
-    // Reset alert flag if stock was replenished above threshold (handled on edit)
 
     const responseData = { success: true, orderId, status: 'paid', txHash, totalPrice };
     cacheResponse(idempotencyKey, responseData);
@@ -160,8 +150,7 @@ router.post("/", auth, validate.order, async (req, res) => {
 });
 
 // GET /api/orders - buyer's order history
-// Query params: status (pending | paid | failed), page, limit
-router.get("/", auth, (req, res) => {
+router.get('/', auth, (req, res) => {
   const { status } = req.query;
   const VALID_STATUSES = ["pending", "paid", "failed"];
   const page = Math.max(1, parseInt(req.query.page) || 1);
@@ -191,25 +180,16 @@ router.get("/", auth, (req, res) => {
      JOIN users u ON p.farmer_id = u.id
      LEFT JOIN addresses a ON o.address_id = a.id
      ${where}
-     ORDER BY o.created_at DESC LIMIT ? OFFSET ?`,
-    )
-    .all(...params, limit, offset);
+     ORDER BY o.created_at DESC LIMIT ? OFFSET ?`
+  ).all(...params, limit, offset);
 
-  res.json({
-    success: true,
-    data,
-    total,
-    page,
-    limit,
-    totalPages: Math.ceil(total / limit),
-  });
+  res.json({ success: true, data, total, page, limit, totalPages: Math.ceil(total / limit) });
 });
 
 // GET /api/orders/sales - farmer's incoming orders
-// Query params: page, limit
-router.get("/sales", auth, (req, res) => {
-  if (req.user.role !== "farmer")
-    return err(res, 403, "Farmers only", "forbidden");
+router.get('/sales', auth, (req, res) => {
+  if (req.user.role !== 'farmer')
+    return err(res, 403, 'Farmers only', 'forbidden');
 
   const page = Math.max(1, parseInt(req.query.page) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
