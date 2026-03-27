@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
@@ -61,12 +61,14 @@ export function RegisterPage() {
   const [error, setError] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const refCode = searchParams.get('ref');
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
     try {
-      const { token, user } = await api.register(form);
+      const { token, user } = await api.register({ ...form, ref: refCode });
       login(token, user);
       navigate(user.role === 'farmer' ? '/dashboard' : '/marketplace');
     } catch (err) {
