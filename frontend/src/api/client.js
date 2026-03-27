@@ -12,6 +12,9 @@ export function clearAccessToken() {
 }
 
 // Reads the csrf_token cookie (not HttpOnly, so JS can read it)
+export function setAccessToken(token) { accessToken = token; }
+export function clearAccessToken()    { accessToken = null; }
+
 function getCsrfToken() {
   const match = document.cookie.split(';').find(c => c.trim().startsWith('csrf_token='));
   return match ? match.trim().split('=')[1] : null;
@@ -40,6 +43,7 @@ async function refreshAccessToken() {
 }
 
 const MUTATING = ['POST', 'PUT', 'PATCH', 'DELETE'];
+const MUTATING    = ['POST', 'PUT', 'PATCH', 'DELETE'];
 const CSRF_EXEMPT = ['/auth/login', '/auth/register'];
 
 async function request(path, options = {}, retry = true) {
@@ -51,12 +55,16 @@ async function request(path, options = {}, retry = true) {
   const csrfToken = needsCsrf ? getCsrfToken() : null;
 
   // If a FormData body is passed, let the browser set Content-Type (multipart boundary)
+  if (needsCsrf) await ensureCsrfToken();
+
+  const csrfToken  = needsCsrf ? getCsrfToken() : null;
   const isFormData = options.body instanceof FormData;
 
   const headers = {};
   if (!isFormData) headers['Content-Type'] = 'application/json';
   if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
   if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+  if (csrfToken)   headers['X-CSRF-Token']  = csrfToken;
   Object.assign(headers, options.headers || {});
 
   const res = await fetch(`${BASE}${path}`, {
@@ -101,22 +109,26 @@ export const api = {
   logout: () => request('/auth/logout', { method: 'POST' }),
   refresh: () => refreshAccessToken(),
 
-  // filters may include: category, minPrice, maxPrice, seller, available, page, limit
+  // Products
   getProducts: (filters = {}) => request(`/products${toQs(filters)}`),
   getCategories: () => request('/products/categories'),
   getProduct: (id) => request(`/products/${id}`),
   createProduct: (body) => request('/products', { method: 'POST', body }),
   getMyProducts: () => request('/products/mine/list'),
+  restockProduct: (id, quantity) => request(`/products/${id}/restock`, { method: 'PATCH', body: { quantity } }),
   deleteProduct: (id) => request(`/products/${id}`, { method: 'DELETE' }),
   updateProduct: (id, body) => request(`/products/${id}`, { method: 'PATCH', body }),
+  getProductReviews: (id) => request(`/products/${id}/reviews`),
   searchProducts: (q) => request(`/products/search?q=${encodeURIComponent(q)}`),
 
+  // Upload a product image — returns { imageUrl }
   uploadProductImage: (file) => {
     const form = new FormData();
     form.append('image', file);
     return request('/products/upload-image', { method: 'POST', body: form });
   },
 
+  // Bulk upload products via CSV — returns { created, skipped, errors }\n  bulkUploadProducts: (file) => {\n    const form = new FormData();\n    form.append('file', file);\n    return request('/products/bulk', { method: 'POST', body: form });\n  },\n\n  // Orders
   placeOrder: (body) => request('/orders', { method: 'POST', body }),
   getOrders: (params = {}) => request(`/orders${toQs(params)}`),
   getSales: (params = {}) => request(`/orders/sales${toQs(params)}`),
@@ -144,4 +156,52 @@ export const api = {
   adminGetUsers: (page = 1) => request(`/admin/users?page=${page}`),
   adminDeactivateUser: (id) => request(`/admin/users/${id}`, { method: 'DELETE' }),
   adminGetStats: () => request('/admin/stats'),
+  // Reviews
+  submitReview: (body) => request('/reviews', { method: 'POST', body }),
+
+  // Wallet
+  getWallet: () => request('/wallet'),
+  getTransactions: () => request('/wallet/transactions'),
+  fundWallet: () => request('/wallet/fund', { method: 'POST' }),
+
+  // Rates
+  getXlmRate: () => request('/rates/xlm-usd'),
+
+  // Analytics
+  getAnalytics: () => request('/analytics/farmer'),
+
+  // Addresses
+  getAddresses: () => request('/addresses'),
+  createAddress: (body) => request('/addresses', { method: 'POST', body }),
+  updateAddress: (id, body) => request(`/addresses/${id}`, { method: 'PUT', body }),
+  deleteAddress: (id) => request(`/addresses/${id}`, { method: 'DELETE' }),
+  setDefaultAddress: (id) => request(`/addresses/${id}/default`, { method: 'PATCH' }),
+
+  // Admin
+  adminGetUsers: (page = 1) => request(`/admin/users?page=${page}`),
+  adminDeactivateUser: (id) => request(`/admin/users/${id}`, { method: 'DELETE' }),
+  adminGetStats: () => request('/admin/stats'),
+  placeOrder: function(body, idempotencyKey) {
+    return request('/orders', {
+      method: 'POST',
+      body: body,
+      headers: idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {}
+    });
+  },
+  getOrders: function(status) { return request('/orders' + (status ? '?status=' + status : '')); },
+  getSales: function() { return request('/orders/sales'); },
+
+  getWallet: function() { return request('/wallet'); },
+  getTransactions: function() { return request('/wallet/transactions'); },
+  fundWallet: function() { return request('/wallet/fund', { method: 'POST' }); },
+
+  setStockAlert:    (productId) => request(`/products/${productId}/alert`,        { method: 'POST' }),
+  removeStockAlert: (productId) => request(`/products/${productId}/alert`,        { method: 'DELETE' }),
+  getMyAlert:       (productId) => request(`/products/${productId}/alert/status`),
+  fundEscrow: (orderId) => request(`/orders/${orderId}/escrow`, { method: 'POST' }),
+  claimEscrow: (orderId) => request(`/orders/${orderId}/claim`, { method: 'POST' }),
+
+  setStockAlert: (productId) => request(`/products/${productId}/alert`, { method: 'POST' }),
+  removeStockAlert: (productId) => request(`/products/${productId}/alert`, { method: 'DELETE' }),
+  getMyAlert: (productId) => request(`/products/${productId}/alert/status`),
 };
