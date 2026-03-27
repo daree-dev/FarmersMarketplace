@@ -41,7 +41,7 @@ router.post('/send', auth, validate.sendXLM, async (req, res) => {
   const { destination, memo } = req.body;
   const amount = parseFloat(req.body.amount);
 
-  const user = db.prepare('SELECT stellar_public_key, stellar_secret_key FROM users WHERE id = ?').get(req.user.id);
+  const user = db.prepare('SELECT id, stellar_public_key, stellar_secret_key FROM users WHERE id = ?').get(req.user.id);
 
   // Prevent sending to yourself
   if (destination === user.stellar_public_key)

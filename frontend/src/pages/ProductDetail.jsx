@@ -34,19 +34,13 @@ export default function ProductDetail() {
   const { id } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [product, setProduct] = useState(null);
-  const [qty, setQty] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState('');
-  const { usd } = useXlmRate();
-
   const [product, setProduct]   = useState(null);
   const [reviews, setReviews]   = useState([]);
   const [qty, setQty]           = useState(1);
   const [loading, setLoading]   = useState(false);
   const [result, setResult]     = useState(null);
   const [error, setError]       = useState('');
+  const { usd } = useXlmRate();
 
   // Review form state
   const [paidOrders, setPaidOrders]     = useState([]);
@@ -189,7 +183,7 @@ export default function ProductDetail() {
         </div>
 
         <div style={s.total}>Total: <strong>{total} XLM</strong></div>
-        {error && <div style={s.err}>{error}</div>}
+        {error && <div style={s.err} dangerouslySetInnerHTML={{ __html: error }} />}
 
         <button style={s.btn} onClick={handleBuy} disabled={loading}>
           {loading ? 'Processing payment...' : `Buy Now · ${total} XLM`}
