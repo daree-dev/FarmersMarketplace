@@ -63,6 +63,10 @@ try {
   process.exit(1);
 }
 
+// Escrow columns migration
+try { db.exec(`ALTER TABLE orders ADD COLUMN escrow_balance_id TEXT`); } catch {}
+try { db.exec(`ALTER TABLE orders ADD COLUMN escrow_status TEXT DEFAULT 'none'`); } catch {}
+
 // Migrate existing DB: add columns if missing
 try { db.exec(`ALTER TABLE products ADD COLUMN category TEXT DEFAULT 'other'`); } catch {}
 try { db.exec(`ALTER TABLE products ADD COLUMN image_url TEXT`); } catch {}
@@ -198,6 +202,21 @@ try {
   `);
 } catch (err) {
   console.error('[DB] Failed to create idempotency_keys table:', err.message);
+// stock_alerts table
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS stock_alerts (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id    INTEGER NOT NULL,
+      product_id INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, product_id),
+      FOREIGN KEY (user_id)    REFERENCES users(id)    ON DELETE CASCADE,
+      FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+    );
+  `);
+} catch (err) {
+  console.error('[DB] Failed to create stock_alerts table:', err.message);
 }
 
 module.exports = db;
