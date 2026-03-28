@@ -88,6 +88,13 @@ async function request(path, options = {}, retry = true) {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.message || data.error || 'Request failed');
+  const data = await res.json();
+  if (!res.ok) {
+    const e = new Error(data.message || data.error || 'Request failed');
+    e.status = res.status;
+    e.data = data;
+    throw e;
+  }
   return data;
 }
 
@@ -171,9 +178,102 @@ export const api = {
   claimEscrow: (orderId) => request(`/orders/${orderId}/claim`, { method: 'POST' }),
   claimPreorder: (orderId) => request(`/orders/${orderId}/claim-preorder`, { method: 'POST' }),
 
+  // Bundles
+  getBundles: () => request('/bundles'),
+  createBundle: (body) => request('/bundles', { method: 'POST', body }),
+  deleteBundle: (id) => request(`/bundles/${id}`, { method: 'DELETE' }),
+  purchaseBundle: (bundle_id) => request('/bundles/purchase', { method: 'POST', body: { bundle_id } }),
+  getBundleOrders: () => request('/bundles/orders'),
+
+  // Product images (multi-image gallery)
+  getProductImages: (productId) => request(`/products/${productId}/images`),
+  uploadProductImages: (productId, files) => {
+    const form = new FormData();
+    files.forEach((f) => form.append("images", f));
+    return request(`/products/${productId}/images`, {
+      method: "POST",
+      body: form,
+    });
+  },
+
+  placeOrder:   (body)         => request('/orders', { method: 'POST', body }),
+  // params may include: status, page, limit
+  getOrders:    (params = {})  => request(`/orders${toQs(params)}`),
+  getSales:     (params = {})  => request(`/orders/sales${toQs(params)}`),
+
+  submitReview: (body)         => request('/reviews', { method: 'POST', body }),
+
+  getWallet:      ()           => request('/wallet'),
+  getTransactions: ()          => request('/wallet/transactions'),
+  fundWallet:     ()           => request('/wallet/fund', { method: 'POST' }),
+  sendXLM:        (body)       => request('/wallet/send', { method: 'POST', body }),
+  addTrustline:   (body)       => request('/wallet/trustline', { method: 'POST', body }),
+  removeTrustline:(body)       => request('/wallet/trustline', { method: 'DELETE', body }),
+  getWalletAssets: ()          => request('/wallet/assets'),
+  getPathEstimate: (params)    => request(`/wallet/path-estimate${toQs(params)}`),
+  deleteAccount:   (force)     => request(`/auth/account${force ? '?force=true' : ''}`, { method: 'DELETE' }),
+  // Returns the SSE URL with the token embedded (EventSource can't set headers)
+  getWalletStreamUrl: ()       => `/api/wallet/stream?token=${encodeURIComponent(accessToken || '')}`,
+  searchProducts: (q) => request(`/products/search?q=${encodeURIComponent(q)}`),
+
+  placeOrder: (body) => request('/orders', { method: 'POST', body }),
+  getOrders: (params = {}) => request(`/orders${toQs(params)}`),
+  getSales: (params = {}) => request(`/orders/sales${toQs(params)}`),
+  updateOrderStatus: (id, status) => request(`/orders/${id}/status`, { method: 'PATCH', body: { status } }),
+
+  submitReview: (body) => request('/reviews', { method: 'POST', body }),
+
+  getWallet: () => request('/wallet'),
+  getTransactions: () => request('/wallet/transactions'),
+  fundWallet: () => request('/wallet/fund', { method: 'POST' }),
+
+  getFarmer: (id) => request(`/farmers/${id}`),
+  updateFarmerProfile: (body) => request('/farmers/me', { method: 'PATCH', body }),
+
+  getXlmRate: () => request('/rates/xlm-usd'),
+  getAnalytics: () => request('/analytics/farmer'),
+
+  // Admin
+  adminGetUsers: (page = 1) => request(`/admin/users?page=${page}`),
+  adminDeactivateUser: (id) => request(`/admin/users/${id}`, { method: 'DELETE' }),
+  adminGetStats: () => request('/admin/stats'),
+  getWallet: function() { return request('/wallet'); },
+  getTransactions: function() { return request('/wallet/transactions'); },
+  fundWallet: function() { return request('/wallet/fund', { method: 'POST' }); },
+  deleteProductImage: (productId, imageId) =>
+    request(`/products/${productId}/images/${imageId}`, { method: "DELETE" }),
+  reorderProductImages: (productId, order) =>
+    request(`/products/${productId}/images/reorder`, {
+      method: "PATCH",
+      body: { order },
+    }),
+
+  // Subscriptions
   getSubscriptions: () => request('/subscriptions'),
   createSubscription: (body) => request('/subscriptions', { method: 'POST', body }),
   cancelSubscription: (id) => request(`/subscriptions/${id}`, { method: 'DELETE' }),
   pauseSubscription: (id) => request(`/subscriptions/${id}/pause`, { method: 'PATCH' }),
   resumeSubscription: (id) => request(`/subscriptions/${id}/resume`, { method: 'PATCH' }),
+
+  // Product import (AgroAPI / JSON)
+  importProductsPreview: (products) => request('/products/import', { method: 'POST', body: { products } }),
+  importProductsConfirm: (products) => request('/products/import/confirm', { method: 'POST', body: { products } }),
+  // Seed phrase backup & recovery
+  getSeedPhrase: (password) => request('/auth/seed-phrase', { method: 'POST', body: { password } }),
+  recoverAccount: (body) => request('/auth/recover', { method: 'POST', body }),
+  // Availability calendar
+  getCalendar: (productId) => request(`/products/${productId}/calendar`),
+  setCalendarWeek: (productId, body) => request(`/products/${productId}/calendar`, { method: 'POST', body }),
+  // Cooperatives & multi-sig
+  createCooperative: (body) => request('/cooperatives', { method: 'POST', body }),
+  getCooperatives: () => request('/cooperatives'),
+  setupMultisig: (id, body) => request(`/cooperatives/${id}/multisig-setup`, { method: 'POST', body }),
+  initiateCoopTx: (id, body) => request(`/cooperatives/${id}/transactions`, { method: 'POST', body }),
+  signPendingTx: (txId) => request(`/cooperatives/transactions/${txId}/sign`, { method: 'POST' }),
+  getPendingTxs: (coopId) => request(`/cooperatives/${coopId}/pending`),
+  // Platform fee
+  getFeePreview: (amount) => request(`/orders/fee-preview?amount=${amount}`),
+  // Account alerts
+  getAlerts: () => request('/wallet/alerts'),
+  markAlertRead: (id) => request(`/wallet/alerts/${id}/read`, { method: 'PATCH' }),
 };
