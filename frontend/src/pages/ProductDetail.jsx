@@ -89,6 +89,9 @@ export default function ProductDetail() {
   const [couponError, setCouponError] = useState('');
   const [couponLoading, setCouponLoading] = useState(false);
 
+  // Platform fee state
+  const [feeInfo, setFeeInfo] = useState(null); // { feePercent, feeAmount, farmerAmount }
+
   const loadReviews = useCallback(async () => {
     try { const res = await api.getProductReviews(id); setReviews(res.data ?? []); }
     catch { setReviews([]); }
@@ -133,6 +136,13 @@ export default function ProductDetail() {
 
   const subtotal = (product.price * qty).toFixed(2);
   const total = couponResult ? couponResult.final_total.toFixed(2) : subtotal;
+
+  // Fetch fee info whenever total changes
+  const totalNum = parseFloat(total);
+  React.useEffect(() => {
+    if (!totalNum) return;
+    api.getFeePreview(totalNum).then(r => setFeeInfo(r)).catch(() => setFeeInfo(null));
+  }, [total]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleApplyCoupon() {
     if (!couponCode.trim()) return;
@@ -357,6 +367,13 @@ export default function ProductDetail() {
             </>
           ) : (
             <>Total: <strong>{total} XLM</strong></>
+          )}
+          {feeInfo && feeInfo.feeAmount > 0 && (
+            <div style={{ marginTop: 8, fontSize: 12, color: '#888', borderTop: '1px solid #e0e0e0', paddingTop: 6 }}>
+              <div>Subtotal: {total} XLM</div>
+              <div>Platform fee ({feeInfo.feePercent}%): −{feeInfo.feeAmount.toFixed(7)} XLM</div>
+              <div style={{ fontWeight: 600, color: '#2d6a4f' }}>Farmer receives: {feeInfo.farmerAmount.toFixed(7)} XLM</div>
+            </div>
           )}
         </div>
         {error && <div style={s.err}>{error}</div>}
