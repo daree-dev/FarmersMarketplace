@@ -96,7 +96,7 @@ export default function Dashboard() {
   const fileInputRef = useRef(null);
 
   // profile state
-  const [profile, setProfile]       = useState({ bio: '', location: '', avatar_url: '', federation_name: '' });
+  const [profile, setProfile]       = useState({ bio: '', location: '', avatar_url: '', federation_name: '', latitude: '', longitude: '', farm_address: '' });
   const [profileMsg, setProfileMsg] = useState(null);
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarPreview, setAvatarPreview] = useState(null);
@@ -257,7 +257,7 @@ export default function Dashboard() {
       
       if (profileRes.data) {
         const d = profileRes.data;
-        setProfile({ bio: d.bio || '', location: d.location || '', avatar_url: d.avatar_url || '' });
+        setProfile({ bio: d.bio || '', location: d.location || '', avatar_url: d.avatar_url || '', federation_name: d.federation_name || '', latitude: d.latitude ?? '', longitude: d.longitude ?? '', farm_address: d.farm_address || '' });
         if (d.avatar_url) setAvatarPreview(d.avatar_url);
       }
     } catch (err) {
@@ -274,7 +274,7 @@ export default function Dashboard() {
       api.getFarmer(user.id)
         .then(res => {
           const d = res.data;
-          setProfile({ bio: d.bio || '', location: d.location || '', avatar_url: d.avatar_url || '', federation_name: d.federation_name || '' });
+          setProfile({ bio: d.bio || '', location: d.location || '', avatar_url: d.avatar_url || '', federation_name: d.federation_name || '', latitude: d.latitude ?? '', longitude: d.longitude ?? '', farm_address: d.farm_address || '' });
           if (d.avatar_url) setAvatarPreview(d.avatar_url);
         })
         .catch(() => {});
@@ -342,8 +342,12 @@ export default function Dashboard() {
         location: profile.location || undefined,
         avatar_url: finalAvatarUrl || undefined,
         federation_name: profile.federation_name || undefined,
+        latitude: profile.latitude !== '' ? parseFloat(profile.latitude) : null,
+        longitude: profile.longitude !== '' ? parseFloat(profile.longitude) : null,
+        farm_address: profile.farm_address || undefined,
       });
-      setProfile({ bio: res.data.bio || '', location: res.data.location || '', avatar_url: res.data.avatar_url || '', federation_name: res.data.federation_name || '' });
+      const d = res.data;
+      setProfile({ bio: d.bio || '', location: d.location || '', avatar_url: d.avatar_url || '', federation_name: d.federation_name || '', latitude: d.latitude ?? '', longitude: d.longitude ?? '', farm_address: d.farm_address || '' });
       setProfileMsg({ type: 'ok', text: t('dashboard.profileUpdated') });
     } catch (err) {
       setProfileMsg({ type: 'err', text: getErrorMessage(err) });
@@ -1001,6 +1005,48 @@ export default function Dashboard() {
             onChange={e => setProfile(p => ({ ...p, location: e.target.value }))}
             maxLength={100}
           />
+
+          <label style={s.label}>Farm Address <span style={{ color: '#aaa', fontWeight: 400 }}>(optional · shown on map)</span></label>
+          <input
+            style={s.input}
+            placeholder="e.g. 123 Farm Road, Nairobi, Kenya"
+            value={profile.farm_address || ''}
+            onChange={e => setProfile(p => ({ ...p, farm_address: e.target.value }))}
+            maxLength={200}
+          />
+
+          <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label style={s.label}>Latitude <span style={{ color: '#aaa', fontWeight: 400 }}>(optional)</span></label>
+              <input
+                style={s.input}
+                type="number"
+                step="any"
+                min="-90"
+                max="90"
+                placeholder="e.g. -1.2921"
+                value={profile.latitude}
+                onChange={e => setProfile(p => ({ ...p, latitude: e.target.value }))}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={s.label}>Longitude <span style={{ color: '#aaa', fontWeight: 400 }}>(optional)</span></label>
+              <input
+                style={s.input}
+                type="number"
+                step="any"
+                min="-180"
+                max="180"
+                placeholder="e.g. 36.8219"
+                value={profile.longitude}
+                onChange={e => setProfile(p => ({ ...p, longitude: e.target.value }))}
+              />
+            </div>
+          </div>
+          <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>
+            💡 Tip: Find your coordinates at{' '}
+            <a href="https://www.latlong.net" target="_blank" rel="noopener noreferrer" style={{ color: '#2d6a4f' }}>latlong.net</a>
+          </div>
 
           <label style={s.label}>{t('dashboard.bio')}</label>
           <textarea

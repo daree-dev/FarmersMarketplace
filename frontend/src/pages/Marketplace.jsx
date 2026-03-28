@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -9,6 +9,8 @@ import StarRating from '../components/StarRating';
 import Pagination from '../components/Pagination';
 import Spinner from '../components/Spinner';
 import { useTranslation } from 'react-i18next';
+
+const MapView = lazy(() => import('../components/MapView'));
 
 const CATEGORIES = ['all', 'vegetables', 'fruits', 'grains', 'dairy', 'herbs', 'other'];
 const PAGE_SIZE = 20;
@@ -47,7 +49,7 @@ const s = {
   buyBtn:     { background: '#2d6a4f', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 18px', cursor: 'pointer', fontWeight: 600, fontSize: 14 },
 };
 
-const EMPTY_FILTERS = { search: '', category: '', minPrice: '', maxPrice: '', seller: '', available: 'true' };
+const EMPTY_FILTERS = { search: '', category: '', minPrice: '', maxPrice: '', seller: '', available: 'true', lat: '', lng: '', radius: '' };
 
 export default function Marketplace() {
   const { t } = useTranslation();
@@ -58,6 +60,8 @@ export default function Marketplace() {
   const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
   const [bundles, setBundles]       = useState([]);
   const [bundleMsg, setBundleMsg]   = useState({});
+  const [viewMode, setViewMode]     = useState('grid'); // 'grid' | 'map'
+  const [geoLoading, setGeoLoading] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
   const { isFavorited, toggleFavorite } = useFavorites();
@@ -82,6 +86,7 @@ export default function Marketplace() {
         if (f.maxPrice && f.maxPrice < MAX_PRICE) params.maxPrice  = f.maxPrice;
         if (f.seller)                             params.seller    = f.seller;
         if (f.available)                          params.available = f.available;
+        if (f.lat && f.lng && f.radius)           { params.lat = f.lat; params.lng = f.lng; params.radius = f.radius; }
         const res = await api.getProducts(params);
         data       = res.data ?? [];
         total      = res.total ?? 0;
@@ -125,6 +130,21 @@ export default function Marketplace() {
     setPage(1);
   }
 
+  function useNearMe() {
+    if (!navigator.geolocation) return;
+    setGeoLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const newFilters = { ...filters, lat: pos.coords.latitude, lng: pos.coords.longitude, radius: filters.radius || 50 };
+        setFilters(newFilters);
+        setPage(1);
+        load(newFilters, 1);
+        setGeoLoading(false);
+      },
+      () => setGeoLoading(false)
+    );
+  }
+
   function handlePageChange(newPage) {
     setPage(newPage);
     load(filters, newPage);
@@ -133,7 +153,23 @@ export default function Marketplace() {
 
   return (
     <div style={s.page}>
-      <div style={s.title}>{t('marketplace.title')}</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 10 }}>
+        <div style={s.title}>{t('marketplace.title')}</div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            style={{ ...s.resetBtn, background: viewMode === 'grid' ? '#2d6a4f' : '#f5f5f5', color: viewMode === 'grid' ? '#fff' : '#333', fontWeight: 600 }}
+            onClick={() => setViewMode('grid')}
+          >
+            ⊞ Grid
+          </button>
+          <button
+            style={{ ...s.resetBtn, background: viewMode === 'map' ? '#2d6a4f' : '#f5f5f5', color: viewMode === 'map' ? '#fff' : '#333', fontWeight: 600 }}
+            onClick={() => setViewMode('map')}
+          >
+            🗺 Map
+          </button>
+        </div>
+      </div>
       <div style={s.sub}>{t('marketplace.subtitle')}</div>
 
       <div style={s.filters}>
@@ -163,11 +199,38 @@ export default function Marketplace() {
           <option value="false">{t('marketplace.allProducts')}</option>
         </select>
 
+        {/* Distance filter */}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button style={{ ...s.resetBtn, background: '#e8f5e9', color: '#2d6a4f' }} onClick={useNearMe} disabled={geoLoading}>
+            {geoLoading ? '...' : '📍 Near Me'}
+          </button>
+          {filters.lat && filters.lng && (
+            <>
+              <input
+                style={{ ...s.input, width: 80 }}
+                type="number"
+                min="1"
+                max="500"
+                placeholder="km"
+                value={filters.radius}
+                onChange={e => set('radius', e.target.value)}
+                aria-label="Radius in km"
+              />
+              <span style={{ fontSize: 12, color: '#888' }}>km radius</span>
+              <button style={s.resetBtn} onClick={() => { set('lat', ''); set('lng', ''); set('radius', ''); }}>✕</button>
+            </>
+          )}
+        </div>
+
         <button style={s.resetBtn} onClick={reset}>{t('marketplace.reset')}</button>
       </div>
 
       {loading ? (
         <Spinner />
+      ) : viewMode === 'map' ? (
+        <Suspense fallback={<Spinner />}>
+          <MapView products={products} />
+        </Suspense>
       ) : products.length === 0 ? (
         <div style={s.empty}>{t('marketplace.noProducts')}</div>
       ) : (
