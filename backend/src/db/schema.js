@@ -13,6 +13,51 @@
  *   db.isPostgres         → boolean
  */
 
+let db;
+try {
+  db = new Database(path.join(__dirname, '../../market.db'));
+} catch (err) {
+  console.error('[DB] Failed to open SQLite database:', err.message);
+  process.exit(1);
+}
+
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL,
+      role TEXT NOT NULL CHECK(role IN ('farmer', 'buyer')),
+      stellar_public_key TEXT,
+      stellar_secret_key TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS refresh_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at DATETIME NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS products (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      farmer_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      category TEXT DEFAULT 'other',
+      price REAL NOT NULL,
+      quantity INTEGER NOT NULL,
+      unit TEXT DEFAULT 'unit',
+      image_url TEXT,
+      is_preorder INTEGER DEFAULT 0,
+      preorder_delivery_date TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (farmer_id) REFERENCES users(id)
+    );
 const USE_POSTGRES = !!process.env.DATABASE_URL;
 
 if (USE_POSTGRES) {
@@ -25,6 +70,24 @@ if (USE_POSTGRES) {
     process.exit(1);
   });
 
+// Migrate existing DB: add columns if missing
+try { db.exec(`ALTER TABLE products ADD COLUMN category TEXT DEFAULT 'other'`); } catch {}
+try { db.exec(`ALTER TABLE products ADD COLUMN image_url TEXT`); } catch {}
+try { db.exec(`ALTER TABLE products ADD COLUMN is_preorder INTEGER DEFAULT 0`); } catch {}
+try { db.exec(`ALTER TABLE products ADD COLUMN preorder_delivery_date TEXT`); } catch {}
+try { db.exec(`ALTER TABLE products ADD COLUMN low_stock_threshold INTEGER DEFAULT 5`); } catch {}
+try { db.exec(`ALTER TABLE products ADD COLUMN low_stock_alerted INTEGER DEFAULT 0`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN active INTEGER DEFAULT 1`); } catch {}
+// Allow admin role — SQLite doesn't support ALTER COLUMN, so we handle it in auth logic
+try { db.exec(`ALTER TABLE users ADD COLUMN bio TEXT`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN location TEXT`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN avatar_url TEXT`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN referral_code TEXT UNIQUE`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN federation_name TEXT UNIQUE`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN referred_by INTEGER REFERENCES users(id)`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN referral_bonus_sent INTEGER DEFAULT 0`); } catch {}
+try { db.exec(`ALTER TABLE products ADD COLUMN low_stock_threshold INTEGER DEFAULT 5`); } catch {}
+try { db.exec(`ALTER TABLE products ADD COLUMN low_stock_alerted INTEGER DEFAULT 0`); } catch {}
   module.exports = pg;
 
 } else {

@@ -32,6 +32,7 @@ jest.mock('../src/utils/stellar', () => ({
   sendPayment:            jest.fn().mockResolvedValue('TXHASH123'),
   isTestnet:              true,
   createClaimableBalance: jest.fn().mockResolvedValue({ txHash: 'ESCROW_TX', balanceId: 'BALANCE_ID_001' }),
+  createPreorderClaimableBalance: jest.fn().mockResolvedValue({ txHash: 'PREORDER_TX', balanceId: 'PREORDER_BALANCE_001' }),
   claimBalance:           jest.fn().mockResolvedValue('CLAIM_TX_001'),
 }));
 
