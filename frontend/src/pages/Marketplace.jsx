@@ -33,7 +33,18 @@ const s = {
   price:      { fontWeight: 700, color: '#2d6a4f', fontSize: 18 },
   qty:        { fontSize: 12, color: '#888', marginTop: 4 },
   badge:      { display: 'inline-block', fontSize: 11, background: '#d8f3dc', color: '#2d6a4f', borderRadius: 4, padding: '2px 7px', marginBottom: 8 },
+  preorderBadge: { display: 'inline-block', fontSize: 11, background: '#fff3cd', color: '#856404', borderRadius: 4, padding: '2px 7px', marginBottom: 8, marginLeft: 6 },
+  bundleBadge:{ display: 'inline-block', fontSize: 11, background: '#fff3cd', color: '#856404', borderRadius: 4, padding: '2px 7px', marginBottom: 8, fontWeight: 700 },
   empty:      { textAlign: 'center', padding: 60, color: '#888' },
+  sellerSection: { display: 'flex', gap: 10, alignItems: 'center', marginTop: 12, paddingTop: 12, borderTop: '1px solid #eee' },
+  sellerAvatar: { width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', background: '#d8f3dc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 },
+  sellerInfo: { flex: 1, minWidth: 0 },
+  sellerName: { fontWeight: 600, fontSize: 13, color: '#2d6a4f', cursor: 'pointer', textDecoration: 'underline', marginBottom: 2 },
+  sellerLocation: { fontSize: 11, color: '#999' },
+  sectionTitle: { fontSize: 20, fontWeight: 700, color: '#2d6a4f', margin: '32px 0 16px' },
+  bundleCard: { background: '#fff', borderRadius: 12, padding: 20, boxShadow: '0 1px 8px #0001', border: '2px solid #fff3cd' },
+  bundleItems:{ fontSize: 13, color: '#555', margin: '8px 0 12px', paddingLeft: 16 },
+  buyBtn:     { background: '#2d6a4f', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 18px', cursor: 'pointer', fontWeight: 600, fontSize: 14 },
 };
 
 const EMPTY_FILTERS = { search: '', category: '', minPrice: '', maxPrice: '', seller: '', available: 'true' };
@@ -45,6 +56,8 @@ export default function Marketplace() {
   const [loading, setLoading]       = useState(false);
   const [page, setPage]             = useState(1);
   const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
+  const [bundles, setBundles]       = useState([]);
+  const [bundleMsg, setBundleMsg]   = useState({});
   const navigate = useNavigate();
   const { user } = useAuth();
   const { isFavorited, toggleFavorite } = useFavorites();
@@ -87,8 +100,30 @@ export default function Marketplace() {
     load({ ...filters, search: debouncedSearch, seller: debouncedSeller }, 1);
   }, [debouncedSearch, debouncedSeller, filters.category, filters.minPrice, filters.maxPrice, filters.available]);
 
-  function set(key, val) { setFilters(f => ({ ...f, [key]: val })); }
-  function reset() { setFilters(EMPTY_FILTERS); setPage(1); }
+  useEffect(() => {
+    api.getBundles().then(res => setBundles(res.data ?? [])).catch(() => {});
+  }, []);
+
+  async function handleBuyBundle(bundleId) {
+    if (!user) return navigate('/auth');
+    setBundleMsg(m => ({ ...m, [bundleId]: { type: 'loading', text: 'Processing...' } }));
+    try {
+      const res = await api.purchaseBundle(bundleId);
+      setBundleMsg(m => ({ ...m, [bundleId]: { type: 'ok', text: `Paid! TX: ${res.txHash?.slice(0, 12)}…` } }));
+      api.getBundles().then(r => setBundles(r.data ?? [])).catch(() => {});
+    } catch (e) {
+      setBundleMsg(m => ({ ...m, [bundleId]: { type: 'err', text: e.message } }));
+    }
+  }
+
+  function set(key, val) {
+    setFilters(f => ({ ...f, [key]: val }));
+  }
+
+  function reset() {
+    setFilters(EMPTY_FILTERS);
+    setPage(1);
+  }
 
   function handlePageChange(newPage) {
     setPage(newPage);
@@ -157,12 +192,13 @@ export default function Marketplace() {
                 )}
               </div>
               {p.category && p.category !== 'other' && <div style={s.badge}>{p.category}</div>}
+              {p.is_preorder ? (
+                <div style={s.preorderBadge}>
+                  Pre-Order{p.preorder_delivery_date ? ` · Delivers ${p.preorder_delivery_date}` : ''}
+                </div>
+              ) : null}
               <div style={s.name}>{p.name}</div>
-              <div style={{ ...s.farmer, cursor: 'pointer', textDecoration: 'underline' }}
-                onClick={e => { e.stopPropagation(); navigate(`/farmer/${p.farmer_id}`); }}>
-                {t('marketplace.by', { name: p.farmer_name })}
-              </div>
-              <div style={s.desc}>{p.description || t('marketplace.freshFromFarm')}</div>
+              <div style={s.desc}>{p.description || 'Fresh from the farm'}</div>
               <div style={s.price}>{p.price} XLM <span style={{ fontSize: 13, fontWeight: 400 }}>/ {p.unit}</span></div>
               {usd(p.price) && <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>{usd(p.price)} <span style={{ fontSize: 10, color: '#aaa' }}>{t('marketplace.approx')}</span></div>}
               <div style={s.qty}>{t('marketplace.available', { qty: p.quantity, unit: p.unit })}</div>
@@ -171,13 +207,78 @@ export default function Marketplace() {
                   <StarRating value={p.avg_rating} count={p.review_count} size={13} />
                 </div>
               )}
+              
+              {/* Seller Information Section */}
+              <div style={s.sellerSection}>
+                {p.farmer_avatar ? (
+                  <img src={p.farmer_avatar} alt={p.farmer_name} style={s.sellerAvatar} />
+                ) : (
+                  <div style={{ ...s.sellerAvatar, fontSize: 18 }}>👨‍🌾</div>
+                )}
+                <div style={s.sellerInfo}>
+                  <div
+                    style={s.sellerName}
+                    onClick={e => { e.stopPropagation(); navigate(`/farmer/${p.farmer_id}`); }}
+                  >
+                    {p.farmer_name}
+                  </div>
+                  {p.farmer_location && <div style={s.sellerLocation}>📍 {p.farmer_location}</div>}
+                </div>
+              </div>
             </div>
           ))}
         </div>
       )}
 
-      <Pagination page={page} totalPages={pagination.totalPages} total={pagination.total}
-        limit={PAGE_SIZE} onChange={handlePageChange} />
+      <Pagination
+        page={page}
+        totalPages={pagination.totalPages}
+        total={pagination.total}
+        limit={PAGE_SIZE}
+        onChange={handlePageChange}
+      />
+
+      {bundles.length > 0 && (
+        <div>
+          <div style={s.sectionTitle}>🎁 Bundle Deals</div>
+          <div style={s.grid}>
+            {bundles.map(b => {
+              const msg = bundleMsg[b.id];
+              const outOfStock = b.items?.some(i => i.stock < i.quantity);
+              return (
+                <div key={b.id} style={s.bundleCard}>
+                  <div style={s.bundleBadge}>Bundle</div>
+                  <div style={s.name}>{b.name}</div>
+                  <div style={s.farmer}>by {b.farmer_name}</div>
+                  {b.description && <div style={s.desc}>{b.description}</div>}
+                  <ul style={s.bundleItems}>
+                    {b.items?.map(i => (
+                      <li key={i.product_id}>{i.quantity} × {i.product_name} ({i.unit})</li>
+                    ))}
+                  </ul>
+                  <div style={s.price}>{b.price} XLM</div>
+                  {usd(b.price) && <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>{usd(b.price)} <span style={{ fontSize: 10, color: '#aaa' }}>(approx.)</span></div>}
+                  {outOfStock && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 6 }}>Some items out of stock</div>}
+                  {msg && (
+                    <div style={{ fontSize: 12, marginTop: 6, color: msg.type === 'ok' ? '#2d6a4f' : msg.type === 'err' ? '#c0392b' : '#888' }}>
+                      {msg.text}
+                    </div>
+                  )}
+                  {user?.role === 'buyer' && !outOfStock && (
+                    <button
+                      style={{ ...s.buyBtn, marginTop: 12, opacity: msg?.type === 'loading' ? 0.6 : 1 }}
+                      disabled={msg?.type === 'loading'}
+                      onClick={() => handleBuyBundle(b.id)}
+                    >
+                      Buy Bundle
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

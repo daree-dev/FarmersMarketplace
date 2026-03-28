@@ -55,15 +55,36 @@ const s = {
   arrowBtn: { background: 'none', border: '1px solid #ddd', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', fontSize: 12 },
 };
 
-const EMPTY_FORM = { name: '', description: '', price: '', quantity: '', unit: 'kg', category: 'other' };
+const EMPTY_FORM = {
+  name: '',
+  description: '',
+  price: '',
+  quantity: '',
+  unit: 'kg',
+  category: 'other',
+  is_preorder: false,
+  preorder_delivery_date: '',
+};
 
 import { useAuth } from '../context/AuthContext';
 
 export default function Dashboard() {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const [products, setProducts] = useState([]);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [restockVals, setRestockVals] = useState({});
+  const [msg, setMsg] = useState(null);
+  const [formErrors, setFormErrors] = useState({});
+  const [sales, setSales] = useState([]);
+  const [salesMsg, setSalesMsg] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // bundle state
+  const [bundles, setBundles] = useState([]);
+  const [bundleForm, setBundleForm] = useState({ name: '', description: '', price: '', items: [{ product_id: '', quantity: 1 }] });
+  const [bundleMsg, setBundleMsg] = useState(null);
 
   // image state
   const [imageFile, setImageFile] = useState(null);
@@ -98,6 +119,11 @@ export default function Dashboard() {
   // QR code modal state
   const [qrProductId, setQrProductId] = useState(null);
   const [qrProductName, setQrProductName] = useState('');
+
+  // Coupon state
+  const [coupons, setCoupons] = useState([]);
+  const [couponForm, setCouponForm] = useState({ code: '', discount_type: 'percent', discount_value: '', max_uses: '', expires_at: '' });
+  const [couponMsg, setCouponMsg] = useState(null);
 
   async function openGallery(productId) {
     setGalleryProductId(productId);
@@ -216,14 +242,18 @@ export default function Dashboard() {
     setLoading(true);
     setError(null);
     try {
-      const [productsRes, salesRes, profileRes] = await Promise.all([
+      const [productsRes, salesRes, profileRes, bundlesRes, couponsRes] = await Promise.all([
         api.getMyProducts().catch(() => ({ data: [] })),
         api.getSales().catch(() => ({ data: [] })),
-        user?.id ? api.getFarmer(user.id).catch(() => ({})) : Promise.resolve({})
+        user?.id ? api.getFarmer(user.id).catch(() => ({})) : Promise.resolve({}),
+        api.getBundles().catch(() => ({ data: [] })),
+        api.getMyCoupons().catch(() => ({ data: [] })),
       ]);
       
       setProducts(productsRes.data ?? productsRes);
       setSales(salesRes.data ?? salesRes);
+      setBundles((bundlesRes.data ?? []).filter(b => b.farmer_id === user?.id));
+      setCoupons(couponsRes.data ?? []);
       
       if (profileRes.data) {
         const d = profileRes.data;
@@ -339,6 +369,9 @@ export default function Dashboard() {
     if (!form.quantity || isNaN(quantity) || quantity <= 0) {
       errors.quantity = 'Quantity must be a positive integer';
     }
+    if (form.is_preorder && !form.preorder_delivery_date) {
+      errors.preorder_delivery_date = 'Delivery date is required for pre-order products';
+    }
 
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
@@ -371,6 +404,8 @@ export default function Dashboard() {
         ...form,
         price: parseFloat(form.price),
         quantity: parseInt(form.quantity),
+        is_preorder: form.is_preorder ? 1 : 0,
+        preorder_delivery_date: form.is_preorder ? form.preorder_delivery_date : null,
         image_url: finalImageUrl || undefined,
       });
       setMsg({ type: 'ok', text: t('dashboard.productListedOk') });
@@ -562,6 +597,37 @@ export default function Dashboard() {
               ))}
             </select>
 
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '8px 0 10px', fontSize: 13, color: '#444' }}>
+              <input
+                type="checkbox"
+                checked={!!form.is_preorder}
+                onChange={e => setForm({
+                  ...form,
+                  is_preorder: e.target.checked,
+                  preorder_delivery_date: e.target.checked ? form.preorder_delivery_date : '',
+                })}
+              />
+              Mark as pre-order
+            </label>
+
+            {form.is_preorder && (
+              <>
+                <label style={s.label}>Expected Delivery Date</label>
+                <input
+                  style={formErrors.preorder_delivery_date ? s.inputErr : s.input}
+                  type="date"
+                  value={form.preorder_delivery_date}
+                  onChange={e => {
+                    setForm({ ...form, preorder_delivery_date: e.target.value });
+                    if (formErrors.preorder_delivery_date) setFormErrors(fe => ({ ...fe, preorder_delivery_date: '' }));
+                  }}
+                />
+                {formErrors.preorder_delivery_date && (
+                  <div style={s.fieldErr} role="alert">{formErrors.preorder_delivery_date}</div>
+                )}
+              </>
+            )}
+
             {/* Image upload */}
             <label style={s.label}>{t('dashboard.productImage')} <span style={{ color: '#aaa', fontWeight: 400 }}>{t('dashboard.imageHint')}</span></label>
 
@@ -690,9 +756,174 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* CSV Bulk Upload */}
+      {/* Bundle Listings */}
+      {user.role === 'farmer' && (
+        <div style={{ ...s.card, marginTop: 24 }}>
+          <h3 style={{ marginBottom: 16, color: '#333' }}>🎁 Bundle Deals</h3>
+          {bundleMsg && (
+            <div style={{ ...s.msg, background: bundleMsg.type === 'ok' ? '#d8f3dc' : '#fee', color: bundleMsg.type === 'ok' ? '#2d6a4f' : '#c0392b' }}>
+              {bundleMsg.text}
+            </div>
+          )}
+          <form onSubmit={async e => {
+            e.preventDefault();
+            setBundleMsg(null);
+            const items = bundleForm.items.filter(i => i.product_id && i.quantity > 0).map(i => ({ product_id: parseInt(i.product_id), quantity: parseInt(i.quantity) }));
+            if (!bundleForm.name.trim()) return setBundleMsg({ type: 'err', text: 'Bundle name is required' });
+            if (items.length === 0) return setBundleMsg({ type: 'err', text: 'Add at least one product item' });
+            try {
+              await api.createBundle({ name: bundleForm.name, description: bundleForm.description, price: parseFloat(bundleForm.price), items });
+              setBundleMsg({ type: 'ok', text: 'Bundle created!' });
+              setBundleForm({ name: '', description: '', price: '', items: [{ product_id: '', quantity: 1 }] });
+              load();
+            } catch (err) { setBundleMsg({ type: 'err', text: err.message }); }
+          }}>
+            <label style={s.label}>Bundle Name</label>
+            <input style={s.input} value={bundleForm.name} onChange={e => setBundleForm(f => ({ ...f, name: e.target.value }))} required />
+            <label style={s.label}>Description (optional)</label>
+            <textarea style={s.textarea} value={bundleForm.description} onChange={e => setBundleForm(f => ({ ...f, description: e.target.value }))} />
+            <label style={s.label}>Bundle Price (XLM)</label>
+            <input style={s.input} type="number" min="0" step="any" value={bundleForm.price} onChange={e => setBundleForm(f => ({ ...f, price: e.target.value }))} required />
+            <label style={{ ...s.label, marginTop: 8 }}>Items</label>
+            {bundleForm.items.map((item, idx) => (
+              <div key={idx} style={{ display: 'flex', gap: 8, marginBottom: 6, alignItems: 'center' }}>
+                <select
+                  style={{ ...s.input, flex: 2, marginBottom: 0 }}
+                  value={item.product_id}
+                  onChange={e => setBundleForm(f => { const items = [...f.items]; items[idx] = { ...items[idx], product_id: e.target.value }; return { ...f, items }; })}
+                >
+                  <option value="">Select product…</option>
+                  {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.quantity} {p.unit})</option>)}
+                </select>
+                <input
+                  type="number" min="1" placeholder="Qty"
+                  style={{ ...s.input, width: 70, marginBottom: 0 }}
+                  value={item.quantity}
+                  onChange={e => setBundleForm(f => { const items = [...f.items]; items[idx] = { ...items[idx], quantity: parseInt(e.target.value) || 1 }; return { ...f, items }; })}
+                />
+                {bundleForm.items.length > 1 && (
+                  <button type="button" style={s.del} onClick={() => setBundleForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) }))}>✕</button>
+                )}
+              </div>
+            ))}
+            <button type="button" style={{ ...s.btn, background: '#555', fontSize: 12, padding: '5px 12px', marginBottom: 12 }}
+              onClick={() => setBundleForm(f => ({ ...f, items: [...f.items, { product_id: '', quantity: 1 }] }))}>
+              + Add Item
+            </button>
+            <br />
+            <button style={s.btn} type="submit">Create Bundle</button>
+          </form>
+
+          {bundles.length > 0 && (
+            <div style={{ marginTop: 20 }}>
+              <div style={{ fontWeight: 600, marginBottom: 8, color: '#555' }}>My Bundles ({bundles.length})</div>
+              {bundles.map(b => (
+                <div key={b.id} style={{ ...s.product, flexDirection: 'column', alignItems: 'stretch' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{b.name}</div>
+                      <div style={{ fontSize: 13, color: '#666' }}>{b.price} XLM · {b.items?.length} item(s)</div>
+                    </div>
+                    <button style={s.del} onClick={async () => {
+                      if (!confirm('Remove this bundle?')) return;
+                      try { await api.deleteBundle(b.id); load(); } catch {}
+                    }}>Remove</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      )}
+
+      {/* Coupon Management */}
       <div style={{ ...s.card, marginTop: 24 }}>
-        <h3 style={{ marginBottom: 16, color: '#333' }}>{t('dashboard.bulkUpload')}</h3>
+        <h3 style={{ marginBottom: 16, color: '#333' }}>🏷️ Coupon Codes</h3>
+        {couponMsg && (
+          <div style={{ ...s.msg, background: couponMsg.type === 'ok' ? '#d8f3dc' : '#fee', color: couponMsg.type === 'ok' ? '#2d6a4f' : '#c0392b', marginBottom: 12 }}>
+            {couponMsg.text}
+          </div>
+        )}
+        <form style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }} onSubmit={async e => {
+          e.preventDefault();
+          setCouponMsg(null);
+          try {
+            await api.createCoupon({
+              code: couponForm.code.trim(),
+              discount_type: couponForm.discount_type,
+              discount_value: parseFloat(couponForm.discount_value),
+              max_uses: couponForm.max_uses ? parseInt(couponForm.max_uses) : undefined,
+              expires_at: couponForm.expires_at || undefined,
+            });
+            setCouponMsg({ type: 'ok', text: 'Coupon created!' });
+            setCouponForm({ code: '', discount_type: 'percent', discount_value: '', max_uses: '', expires_at: '' });
+            const res = await api.getMyCoupons();
+            setCoupons(res.data ?? []);
+          } catch (err) { setCouponMsg({ type: 'err', text: err.message }); }
+        }}>
+          <div>
+            <label style={s.label}>Code</label>
+            <input style={s.input} placeholder="e.g. SUMMER10" value={couponForm.code} onChange={e => setCouponForm(f => ({ ...f, code: e.target.value }))} required />
+          </div>
+          <div>
+            <label style={s.label}>Type</label>
+            <select style={s.input} value={couponForm.discount_type} onChange={e => setCouponForm(f => ({ ...f, discount_type: e.target.value }))}>
+              <option value="percent">Percent (%)</option>
+              <option value="fixed">Fixed (XLM)</option>
+            </select>
+          </div>
+          <div>
+            <label style={s.label}>Value</label>
+            <input style={s.input} type="number" min="0.01" step="any" placeholder={couponForm.discount_type === 'percent' ? '10' : '1.5'} value={couponForm.discount_value} onChange={e => setCouponForm(f => ({ ...f, discount_value: e.target.value }))} required />
+          </div>
+          <div>
+            <label style={s.label}>Max Uses (optional)</label>
+            <input style={s.input} type="number" min="1" placeholder="Unlimited" value={couponForm.max_uses} onChange={e => setCouponForm(f => ({ ...f, max_uses: e.target.value }))} />
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={s.label}>Expires At (optional)</label>
+            <input style={s.input} type="datetime-local" value={couponForm.expires_at} onChange={e => setCouponForm(f => ({ ...f, expires_at: e.target.value }))} />
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <button style={s.btn} type="submit">Create Coupon</button>
+          </div>
+        </form>
+        {coupons.length > 0 && (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid #eee', textAlign: 'left' }}>
+                <th style={{ padding: '6px 8px' }}>Code</th>
+                <th style={{ padding: '6px 8px' }}>Discount</th>
+                <th style={{ padding: '6px 8px' }}>Uses</th>
+                <th style={{ padding: '6px 8px' }}>Expires</th>
+                <th style={{ padding: '6px 8px' }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {coupons.map(c => (
+                <tr key={c.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                  <td style={{ padding: '6px 8px', fontWeight: 600 }}>{c.code}</td>
+                  <td style={{ padding: '6px 8px' }}>{c.discount_type === 'percent' ? `${c.discount_value}%` : `${c.discount_value} XLM`}</td>
+                  <td style={{ padding: '6px 8px' }}>{c.used_count}{c.max_uses ? ` / ${c.max_uses}` : ''}</td>
+                  <td style={{ padding: '6px 8px' }}>{c.expires_at ? new Date(c.expires_at).toLocaleDateString() : '—'}</td>
+                  <td style={{ padding: '6px 8px' }}>
+                    <button style={s.del} onClick={async () => {
+                      if (!confirm('Delete this coupon?')) return;
+                      try { await api.deleteCoupon(c.id); setCoupons(cs => cs.filter(x => x.id !== c.id)); } catch {}
+                    }}>Delete</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {coupons.length === 0 && <div style={{ color: '#aaa', fontSize: 13 }}>No coupons yet.</div>}
+      </div>
+
+      {/* CSV Bulk Upload */}
+      <div style={{ ...s.card, marginTop: 24 }}>        <h3 style={{ marginBottom: 16, color: '#333' }}>📤 Bulk Upload Products</h3>
         <p style={{ fontSize: 14, color: '#666', marginBottom: 16 }}>
           {t('dashboard.bulkUploadDesc')}
         </p>

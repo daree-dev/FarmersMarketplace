@@ -71,6 +71,12 @@ export default function ProductDetail() {
   const [reviewError, setReviewError] = useState('');
   const [reviewSuccess, setReviewSuccess] = useState('');
 
+  // Coupon state
+  const [couponCode, setCouponCode] = useState('');
+  const [couponResult, setCouponResult] = useState(null); // { discount, final_total, discount_type, discount_value }
+  const [couponError, setCouponError] = useState('');
+  const [couponLoading, setCouponLoading] = useState(false);
+
   const loadReviews = useCallback(async () => {
     try { const res = await api.getProductReviews(id); setReviews(res.data ?? []); }
     catch { setReviews([]); }
@@ -113,15 +119,22 @@ export default function ProductDetail() {
 
   if (!product) return <Spinner />;
 
-  const total = (product.price * qty).toFixed(2);
+  const subtotal = (product.price * qty).toFixed(2);
+  const total = couponResult ? couponResult.final_total.toFixed(2) : subtotal;
 
-  async function handleAlert() {
-    setAlertLoading(true);
+  async function handleApplyCoupon() {
+    if (!couponCode.trim()) return;
+    setCouponLoading(true);
+    setCouponError('');
+    setCouponResult(null);
     try {
-      if (alertSet) { await api.removeStockAlert(id); setAlertSet(false); }
-      else { await api.setStockAlert(id); setAlertSet(true); }
-    } catch (e) { setError(e.message); }
-    finally { setAlertLoading(false); }
+      const res = await api.validateCoupon({ code: couponCode.trim(), product_id: product.id, quantity: qty });
+      setCouponResult(res);
+    } catch (e) {
+      setCouponError(getErrorMessage(e));
+    } finally {
+      setCouponLoading(false);
+    }
   }
 
   async function handleBuy() {
@@ -131,7 +144,12 @@ export default function ProductDetail() {
     setLoading(true);
     setError('');
     try {
-      const res = await api.placeOrder({ product_id: product.id, quantity: qty, address_id: selectedAddressId || undefined });
+      const res = await api.placeOrder({
+        product_id: product.id,
+        quantity: qty,
+        address_id: selectedAddressId || undefined,
+        coupon_code: couponResult ? couponCode.trim() : undefined,
+      });
       if (useEscrow) {
         const escrowRes = await api.fundEscrow(res.orderId);
         setResult({ ...res, escrow: true, balanceId: escrowRes.balanceId });
@@ -249,8 +267,20 @@ export default function ProductDetail() {
           <StarRating value={product.avg_rating || 0} count={product.review_count || 0} size={18} />
         </div>
 
-        <div style={s.desc}>{product.description || t('productDetail.freshFromFarm')}</div>
-        <div style={s.price}>{product.price} XLM <span style={{ fontSize: 14, fontWeight: 400 }}>/ {product.unit}</span></div>
+        <div style={s.desc}>
+          {product.description || "Fresh from the farm."}
+        </div>
+        {product.is_preorder ? (
+          <div style={{ marginBottom: 12, fontSize: 13, fontWeight: 600, color: '#856404', background: '#fff3cd', display: 'inline-block', padding: '4px 10px', borderRadius: 20 }}>
+            Pre-Order{product.preorder_delivery_date ? ` · Expected delivery ${product.preorder_delivery_date}` : ''}
+          </div>
+        ) : null}
+        <div style={s.price}>
+          {product.price} XLM{" "}
+          <span style={{ fontSize: 14, fontWeight: 400 }}>
+            / {product.unit}
+          </span>
+        </div>
         {usd(product.price) && (
           <div style={{ fontSize: 13, color: '#888', marginBottom: 4 }}>
             {usd(product.price)} {t('productDetail.perUnit', { unit: product.unit })} <span style={{ fontSize: 11, color: '#bbb' }}>{t('productDetail.approxRate')}</span>
@@ -284,7 +314,39 @@ export default function ProductDetail() {
           </div>
         )}
 
-        <div style={s.total}>{t('productDetail.total')} <strong>{total} XLM</strong></div>
+        {user?.role === 'buyer' && product.quantity > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                style={{ ...s.input, flex: 1, marginBottom: 0 }}
+                placeholder="Coupon code"
+                value={couponCode}
+                onChange={e => { setCouponCode(e.target.value); setCouponResult(null); setCouponError(''); }}
+                onKeyDown={e => e.key === 'Enter' && handleApplyCoupon()}
+              />
+              <button style={{ ...s.btnSm, whiteSpace: 'nowrap' }} onClick={handleApplyCoupon} disabled={couponLoading}>
+                {couponLoading ? '...' : 'Apply'}
+              </button>
+            </div>
+            {couponError && <div style={{ ...s.err, marginTop: 4 }}>{couponError}</div>}
+            {couponResult && (
+              <div style={{ color: '#2d6a4f', fontSize: 13, marginTop: 4 }}>
+                ✅ Coupon applied — {couponResult.discount_type === 'percent' ? `${couponResult.discount_value}% off` : `${couponResult.discount_value} XLM off`} (−{couponResult.discount.toFixed(2)} XLM)
+              </div>
+            )}
+          </div>
+        )}
+
+        <div style={s.total}>
+          {couponResult ? (
+            <>
+              <span style={{ textDecoration: 'line-through', color: '#aaa', marginRight: 8 }}>{subtotal} XLM</span>
+              Total: <strong>{total} XLM</strong>
+            </>
+          ) : (
+            <>Total: <strong>{total} XLM</strong></>
+          )}
+        </div>
         {error && <div style={s.err}>{error}</div>}
 
         {product.quantity === 0 ? (
