@@ -263,6 +263,48 @@ export const api = {
       body: form,
     });
   },
+
+  placeOrder:   (body)         => request('/orders', { method: 'POST', body }),
+  // params may include: status, page, limit
+  getOrders:    (params = {})  => request(`/orders${toQs(params)}`),
+  getSales:     (params = {})  => request(`/orders/sales${toQs(params)}`),
+
+  submitReview: (body)         => request('/reviews', { method: 'POST', body }),
+
+  getWallet:      ()           => request('/wallet'),
+  getTransactions: ()          => request('/wallet/transactions'),
+  fundWallet:     ()           => request('/wallet/fund', { method: 'POST' }),
+  sendXLM:        (body)       => request('/wallet/send', { method: 'POST', body }),
+  // Returns the SSE URL with the token embedded (EventSource can't set headers)
+  getWalletStreamUrl: ()       => `/api/wallet/stream?token=${encodeURIComponent(accessToken || '')}`,
+  searchProducts: (q) => request(`/products/search?q=${encodeURIComponent(q)}`),
+
+  placeOrder: (body) => request('/orders', { method: 'POST', body }),
+  // params may include: status, page, limit
+  getOrders: (params = {}) => request(`/orders${toQs(params)}`),
+  // params may include: page, limit
+  getSales: (params = {}) => request(`/orders/sales${toQs(params)}`),
+  getOrders: (status) => request(`/orders${status ? `?status=${status}` : ''}`),
+  getSales: () => request('/orders/sales'),
+  updateOrderStatus: (id, status) => request(`/orders/${id}/status`, { method: 'PATCH', body: { status } }),
+
+  getWallet: () => request('/wallet'),
+  getTransactions: () => request('/wallet/transactions'),
+  fundWallet: () => request('/wallet/fund', { method: 'POST' }),
+  getAnalytics: () => request('/analytics/farmer'),
+  getCategories: function() { return request('/products/categories'); },
+  getProduct: function(id) { return request('/products/' + id); },
+  createProduct: function(body) { return request('/products', { method: 'POST', body: body }); },
+  getMyProducts: function() { return request('/products/mine/list'); },
+  deleteProduct: function(id) { return request('/products/' + id, { method: 'DELETE' }); },
+
+  placeOrder: function(body) { return request('/orders', { method: 'POST', body: body }); },
+  getOrders: function(status) { return request('/orders' + (status ? '?status=' + status : '')); },
+  getSales: function() { return request('/orders/sales'); },
+
+  getWallet: function() { return request('/wallet'); },
+  getTransactions: function() { return request('/wallet/transactions'); },
+  fundWallet: function() { return request('/wallet/fund', { method: 'POST' }); },
   deleteProductImage: (productId, imageId) =>
     request(`/products/${productId}/images/${imageId}`, { method: "DELETE" }),
   reorderProductImages: (productId, order) =>
